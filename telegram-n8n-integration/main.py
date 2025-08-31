@@ -11,8 +11,12 @@ n8n workflows via HTTP POST webhooks.
 import os
 import logging
 import asyncio
+from dotenv import load_dotenv
 from telethon import TelegramClient, events
 import requests
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
