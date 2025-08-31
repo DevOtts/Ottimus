@@ -1,0 +1,8 @@
+# Telegram to n8n Integration - Python Dependencies
+# Exact versions as specified in architecture document
+
+# Telethon - Telegram MTProto API client
+telethon==1.29.1
+
+# Requests - HTTP library for webhook delivery
+requests==2.31.0
