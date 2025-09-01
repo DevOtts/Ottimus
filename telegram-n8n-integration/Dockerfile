@@ -26,3 +26,4 @@ VOLUME ["/app/data"]
 # Run the main application
 CMD ["python", "main.py"]
 
+

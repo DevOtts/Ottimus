@@ -42,3 +42,4 @@ networks:
   telegram-network:
     driver: bridge
 
+
