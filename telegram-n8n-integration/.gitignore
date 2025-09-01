@@ -78,4 +78,10 @@ Desktop.ini
 .bmad-core/
 .cursor/
 .vscode/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
 # NOTE: session.session is intentionally NOT ignored - it's required for cloud deployment
+#session.session

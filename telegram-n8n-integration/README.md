@@ -2,35 +2,36 @@
 
 ## 📋 Project Overview
 
-This project creates a minimal Python application that listens to Telegram messages from groups where your personal user is a member and forwards them to n8n workflows via webhooks. The solution uses Telethon (Telegram's Python library) and is designed to run continuously on Render.com.
+This project creates a minimal Python application that listens to Telegram messages from groups where your personal user is a member and forwards them to n8n workflows via webhooks. The solution uses Telethon (Telegram's Python library) and is designed to run in Docker containers on your VPS with Portainer management.
 
 ### Business Purpose
 - **Real-time Message Processing**: Capture Telegram group messages as they arrive
 - **Workflow Automation**: Trigger n8n workflows based on Telegram activity
 - **Personal Integration**: Monitor groups you're already a member of without requiring bot permissions
-- **Cloud Deployment**: Run continuously without local infrastructure
+- **Self-hosted Deployment**: Run continuously on your own VPS with Docker
 
 ## 🏗️ Architecture Overview
 
 ```
 Telegram Groups → Telethon Client → Webhook → n8n Workflow
      ↑                ↑              ↑           ↑
-Personal User    Python App     HTTP POST   Automation
-  Membership    (Render.com)    Request      Logic
+Personal User    Docker Container  HTTP POST   Automation
+  Membership      (VPS/Portainer)   Request      Logic
 ```
 
 ## 📁 Project Structure
 
 ```
 telegram-n8n-integration/
-├── main.py                # Complete application (single file)
-├── discover_chats.py      # Chat ID discovery utility
-├── requirements.txt       # Python dependencies (2 packages)
-├── render.yaml           # Render.com deployment config
-├── session.session       # Telegram authentication (generated after first auth)
-├── .env.example          # Template for local environment variables
-├── .gitignore            # Git ignore patterns
-└── README.md             # This file
+├── Dockerfile                # Docker container configuration
+├── docker-compose.yml        # Docker Compose orchestration
+├── main.py                  # Complete application (single file)
+├── discover_chats.py        # Chat ID discovery utility
+├── requirements.txt         # Python dependencies
+├── session.session         # Telegram authentication (generated after first auth)
+├── .env.example            # Template for local environment variables
+├── .gitignore              # Git ignore patterns
+└── README.md               # This file
 ```
 
 ## 🚀 Quick Start Guide
@@ -118,10 +119,11 @@ python main.py
 ```
 
 **What happens:**
-1. **First time**: You'll be prompted for verification code from Telegram
-2. **Creates**: `session.session` file (keep this for deployment!)
-3. **Shows**: All incoming messages with their chat IDs in logs
-4. **Press Ctrl+C** to stop after you see some messages
+1. **First time**: You'll be prompted for verification code from Telegram SMS
+2. **If you have 2FA enabled**: You'll also be prompted for your Two-Step Verification password
+3. **Creates**: `session.session` file (keep this for deployment!)
+4. **Shows**: All incoming messages with their chat IDs in logs
+5. **Press Ctrl+C** to stop after you see some messages
 
 #### Discover Chat IDs
 
@@ -179,11 +181,12 @@ python main.py
 **Send a test message** in one of your whitelisted chats. You should see:
 ```
 INFO - Starting Telegram to n8n Integration...
+INFO - Docker deployment - Session storage: /app/data/session.session
 INFO - Successfully connected to Telegram!
 INFO - Webhook endpoint: https://your-n8n.com/webhook/telegram
-INFO - Monitoring 3 whitelisted chats
+INFO - Monitoring 3 whitelisted chats: [-1001234567890, 123456789, -1001987654321]
 INFO - Listening for messages... (Press Ctrl+C to stop)
-INFO - New message from group -1001234567890: Test message
+INFO - New message from channel -1001234567890: Test message
 INFO - Successfully sent to n8n: HTTP 200
 ```
 
@@ -220,6 +223,173 @@ The application sends JSON data to your n8n webhook with this structure:
 }
 ```
 
+## 🐳 Docker Deployment
+
+### Local Docker Testing
+
+#### Prerequisites
+- Docker and Docker Compose installed
+- Completed local authentication (have session.session file)
+- Environment variables configured in .env
+
+#### Build and Run with Docker Compose
+```bash
+# Make sure you're in the telegram-n8n-integration directory
+cd telegram-n8n-integration
+
+# Build and start the container
+docker-compose up --build
+
+# Run in background (detached mode)
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
+
+# Stop the service
+docker-compose down
+```
+
+#### Manual Docker Commands
+```bash
+# Build the image
+docker build -t telegram-n8n-listener .
+
+# Run with volume and environment variables
+docker run -d \
+  --name telegram-n8n-listener \
+  --restart unless-stopped \
+  -v telegram_session_data:/app/data \
+  -e TELEGRAM_API_ID=${TELEGRAM_API_ID} \
+  -e TELEGRAM_API_HASH=${TELEGRAM_API_HASH} \
+  -e TELEGRAM_PHONE=${TELEGRAM_PHONE} \
+  -e N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL} \
+  -e TELEGRAM_WHITELIST_CHATS=${TELEGRAM_WHITELIST_CHATS} \
+  telegram-n8n-listener
+```
+
+### VPS Deployment with Portainer
+
+#### Prerequisites
+- ✅ VPS with Docker and Portainer installed
+- ✅ Local testing completed successfully
+- ✅ Session file created locally (will be recreated in container)
+
+#### Method 1: Deploy via Portainer UI (Recommended)
+
+1. **Access Portainer**:
+   - Open your VPS Portainer interface (usually `http://your-vps-ip:9000`)
+   - Login to Portainer dashboard
+
+2. **Create Stack**:
+   - Go to **"Stacks"** → **"Add Stack"**
+   - **Name**: `telegram-n8n-integration`
+   - **Build method**: Choose **"Web editor"**
+
+3. **Paste Docker Compose Configuration**:
+   ```yaml
+   version: '3.8'
+   services:
+     telegram-n8n-listener:
+       build: .
+       container_name: telegram-n8n-listener
+       restart: unless-stopped
+       volumes:
+         - telegram_session_data:/app/data
+       environment:
+         - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+         - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+         - TELEGRAM_PHONE=${TELEGRAM_PHONE}
+         - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
+         - TELEGRAM_WHITELIST_CHATS=${TELEGRAM_WHITELIST_CHATS}
+       networks:
+         - telegram-network
+   volumes:
+     telegram_session_data:
+   networks:
+     telegram-network:
+   ```
+
+4. **Set Environment Variables**:
+   - In the **"Environment variables"** section, add:
+   ```
+   TELEGRAM_API_ID=16952372
+   TELEGRAM_API_HASH=6993367159138785c01a9a4d24ad3ee9
+   TELEGRAM_PHONE=+5541999193736
+   N8N_WEBHOOK_URL=https://webhookn8n.otimiza.ai/webhook/ottimus-telegram-webhook
+   TELEGRAM_WHITELIST_CHATS=-1001774144094
+   ```
+
+5. **Deploy Stack**:
+   - Click **"Deploy the stack"**
+   - Portainer will build and start your container
+
+6. **Initial Authentication** (First deployment only):
+   - Container will fail on first run (needs authentication)
+   - Go to **"Containers"** → **telegram-n8n-listener** → **"Console"**
+   - **Connect** and run: `python main.py`
+   - **Enter SMS code and 2FA password** when prompted
+   - **Exit** and restart container - it will now use the session file automatically
+
+7. **Monitor**:
+   - Go to **"Containers"** to see your running service
+   - Click on the container to view logs and manage it
+
+#### Method 2: Deploy via Git Repository
+
+1. **Prepare Repository**:
+   ```bash
+   # Create repository with Docker files
+   git add Dockerfile docker-compose.yml
+   git commit -m "Add Docker deployment configuration"
+   git push
+   ```
+
+2. **Deploy in Portainer**:
+   - **Stacks** → **"Add Stack"** → **"Repository"**
+   - **Repository URL**: Your GitHub repository URL
+   - **Compose path**: `docker-compose.yml`
+   - **Environment variables**: Set as above
+   - **Deploy**
+
+### Container Management
+
+#### View Logs
+```bash
+# Via docker-compose
+docker-compose logs -f
+
+# Via docker commands
+docker logs -f telegram-n8n-listener
+
+# In Portainer: Containers → telegram-n8n-listener → Logs
+```
+
+#### Update Deployment
+```bash
+# Pull latest changes
+git pull
+
+# Rebuild and restart
+docker-compose up --build -d
+
+# In Portainer: Stacks → telegram-n8n-integration → "Update the stack"
+```
+
+#### Manage Container
+```bash
+# Stop
+docker-compose down
+
+# Start
+docker-compose up -d
+
+# Restart
+docker-compose restart
+
+# In Portainer: Use the container management interface
+```
+
 ## 🛠️ Troubleshooting
 
 ### Authentication Problems
@@ -229,6 +399,16 @@ The application sends JSON data to your n8n webhook with this structure:
 
 # ❌ "Invalid API credentials"
 # ✅ Fix: Double-check API ID and API Hash from my.telegram.org
+
+# ❌ App asks for password after SMS code
+# ✅ Fix: You have Two-Factor Authentication enabled in Telegram
+# ✅ Enter your Two-Step Verification password (the one YOU set up)
+# ✅ Check: Telegram Settings → Privacy and Security → Two-Step Verification
+
+# ❌ "Invalid password" or forgot 2FA password
+# ✅ Fix Option 1: Reset 2FA password via email (if you set recovery email)
+# ✅ Fix Option 2: Temporarily disable 2FA in Telegram for setup
+# ✅ Remember: You can re-enable 2FA after session.session is created
 
 # ❌ Repeated auth requests
 # ✅ Fix: Make sure session.session file exists and is readable
@@ -258,6 +438,21 @@ The application sends JSON data to your n8n webhook with this structure:
 # pip install -r requirements.txt
 ```
 
+### Docker Issues
+```bash
+# ❌ Docker build fails
+# ✅ Fix: Ensure all files (Dockerfile, requirements.txt, main.py) exist
+# ✅ Check: Docker is running and you have sufficient permissions
+
+# ❌ Container exits immediately
+# ✅ Fix: Check container logs: docker logs telegram-n8n-listener
+# ✅ Most likely: Environment variables not set or authentication needed
+
+# ❌ Session not persisting across container restarts
+# ✅ Fix: Ensure volume is properly mounted: telegram_session_data:/app/data
+# ✅ Check: Volume exists: docker volume ls
+```
+
 ### Webhook Problems
 ```bash
 # ❌ "Webhook timeout error"
@@ -281,85 +476,11 @@ The application sends JSON data to your n8n webhook with this structure:
 # ✅ Fix: Add the chat ID to your whitelist or leave whitelist empty for testing
 ```
 
-## 🌐 Deployment to Render.com
-
-### Prerequisites for Deployment
-- ✅ Local testing successful
-- ✅ `session.session` file created
-- ✅ All environment variables known
-
-### Deployment Steps
-
-1. **Create GitHub Repository**:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial Telegram to n8n integration"
-   git remote add origin https://github.com/your-username/telegram-n8n-integration.git
-   git push -u origin main
-   ```
-
-2. **Deploy on Render.com**:
-   - Go to [https://dashboard.render.com/](https://dashboard.render.com/)
-   - Click **"New +"** → **"Background Worker"**
-   - Connect your GitHub repository
-   - Render will automatically detect `render.yaml`
-
-3. **Configure Environment Variables in Render**:
-   Set the same variables from your `.env` file:
-   - `TELEGRAM_API_ID` → Your API ID
-   - `TELEGRAM_API_HASH` → Your API Hash
-   - `TELEGRAM_PHONE` → Your phone number
-   - `N8N_WEBHOOK_URL` → Your n8n webhook URL
-   - `TELEGRAM_WHITELIST_CHATS` → Your chat IDs
-
-4. **Deploy**: Click "Create Web Service"
-
-The `render.yaml` file contains all deployment configuration:
-```yaml
-services:
-  - type: worker
-    name: telegram-n8n-listener
-    runtime: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python main.py"
-    envVars:
-      - key: TELEGRAM_API_ID
-        sync: false
-      - key: TELEGRAM_API_HASH
-        sync: false
-      - key: TELEGRAM_PHONE
-        sync: false
-      - key: N8N_WEBHOOK_URL
-        sync: false
-      - key: TELEGRAM_WHITELIST_CHATS
-        sync: false
-```
-
-## 🔍 Monitoring & Logs
-
-### Local Development
-```bash
-# Activate virtual environment
-source venv/bin/activate
-
-# Run with verbose output
-python main.py
-
-# Check what's happening
-tail -f /path/to/logs  # if you configure file logging
-```
-
-### Production (Render.com)
-- **Monitor**: Render dashboard logs
-- **Check**: Service health and uptime
-- **Debug**: Environment variable configuration
-
 ## 🛡️ Security Considerations
 
 ### Credential Management
 - ✅ Never commit `.env` to repository
-- ✅ Use Render's environment variables for production
+- ✅ Use Portainer's environment variables for production
 - ✅ Rotate API credentials if compromised
 
 ### Access Control
@@ -370,6 +491,7 @@ tail -f /path/to/logs  # if you configure file logging
 
 ### Network Security
 - ✅ n8n webhook should use HTTPS
+- ✅ Container isolation via Docker networks
 - 🔶 Consider implementing webhook authentication/signatures
 - 🔶 Monitor for unusual traffic patterns
 
@@ -401,19 +523,26 @@ tail -f /path/to/logs  # if you configure file logging
 - [ ] 📊 Check logs: "Successfully sent to n8n: HTTP 200"
 - [ ] 🎯 Verify n8n workflow triggered
 
+### **Docker Test:**
+- [ ] 🐳 Build Docker image successfully: `docker build -t telegram-n8n-listener .`
+- [ ] 🚀 Run with docker-compose: `docker-compose up --build`
+- [ ] 📊 Verify container logs show successful connection
+- [ ] 🔄 Test container restart: session persists
+
 ## 📞 Support & Resources
 
 ### Documentation Links
 - [Telethon Documentation](https://docs.telethon.dev/)
 - [Telegram API Documentation](https://core.telegram.org/api)
 - [n8n Webhook Documentation](https://docs.n8n.io/integrations/trigger-nodes/webhook/)
-- [Render.com Documentation](https://render.com/docs)
+- [Docker Documentation](https://docs.docker.com/)
+- [Portainer Documentation](https://documentation.portainer.io/)
 
 ### Technical Requirements
 - **Python Version**: 3.9+ required (including Python 3.13+ support)
-- **Platform**: Render.com Background Worker Service  
+- **Container Platform**: Docker with docker-compose support
 - **Dependencies**: Telethon 1.40.0, requests 2.31.0, python-dotenv 1.0.0
-- **Session Storage**: File-based (`session.session`)
+- **Session Storage**: Docker volume-mounted (`/app/data/session.session`)
 
 ## 🔄 Development Workflow
 
@@ -430,19 +559,21 @@ source venv/bin/activate          # Activate environment
 python main.py                    # Run main application
 python discover_chats.py          # Discover chat IDs
 
-# Testing
-TELEGRAM_WHITELIST_CHATS="" python main.py  # Run without whitelist
+# Docker development
+docker-compose up --build         # Test in container
+docker-compose logs -f            # View container logs
 ```
 
 ### Git Workflow
 ```bash
 # After successful local testing
 git add session.session           # IMPORTANT: Include session file
+git add Dockerfile docker-compose.yml
 git add .
-git commit -m "Update implementation"
+git commit -m "Update Docker implementation"
 git push
 
-# Render.com will auto-deploy on push
+# Deploy via Portainer using repository method
 ```
 
 ## 🎉 Success Indicators
@@ -452,12 +583,21 @@ You know everything is working when you see:
 **✅ Local Success:**
 ```
 INFO - Starting Telegram to n8n Integration...
+INFO - Docker deployment - Session storage: /app/data/session.session
 INFO - Successfully connected to Telegram!
 INFO - Webhook endpoint: https://your-n8n.com/webhook/telegram
-INFO - Monitoring 3 whitelisted chats
+INFO - Monitoring 1 whitelisted chats: [-1001774144094]
 INFO - Listening for messages... (Press Ctrl+C to stop)
-INFO - New message from group -1001234567890: Hello world!
+INFO - New message from channel -1001774144094: #NEUROETH/USDT (Short📉, x20)...
 INFO - Successfully sent to n8n: HTTP 200
+```
+
+**✅ Docker Success:**
+```
+telegram-n8n-listener    | INFO - Starting Telegram to n8n Integration...
+telegram-n8n-listener    | INFO - Docker deployment - Session storage: /app/data/session.session
+telegram-n8n-listener    | INFO - Successfully connected to Telegram!
+telegram-n8n-listener    | INFO - Listening for messages...
 ```
 
 **✅ n8n Success:**
@@ -465,11 +605,11 @@ INFO - Successfully sent to n8n: HTTP 200
 - Workflow executes successfully
 - No errors in n8n execution logs
 
-**✅ Production Success:**
-- Render service shows "Running" status
-- Logs show successful connections
-- Messages flowing from Telegram to n8n
+**✅ Production Success (Portainer):**
+- Container shows "running" status in Portainer
+- Logs show successful Telegram connections
+- Messages flowing from your specific channel to n8n
 
 ---
 
-*Ready to connect your Telegram groups to n8n automation! 🚀*
+*Ready to connect your Telegram channel to n8n automation with Docker! 🐳🚀*

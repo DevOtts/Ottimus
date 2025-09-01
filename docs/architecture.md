@@ -20,13 +20,14 @@ This unified approach combines what would traditionally be separate backend and 
 
 ### Technical Summary
 
-This architecture implements a **serverless event-driven integration** using Python Telethon as a bridge between Telegram's MTProto API and n8n's webhook system. The solution deploys as a continuous worker service on Render.com, maintaining persistent Telegram sessions while forwarding whitelisted messages via HTTP POST to trigger downstream automation workflows. The system emphasizes **security through chat whitelisting**, **minimal operational overhead**, and **real-time message processing** with built-in error handling and logging for production reliability.
+This architecture implements a **containerized event-driven integration** using Python Telethon as a bridge between Telegram's MTProto API and n8n's webhook system. The solution deploys as a Docker container on a personal VPS managed through Portainer, maintaining persistent Telegram sessions via volume mounts while forwarding whitelisted messages via HTTP POST to trigger downstream automation workflows. The system emphasizes **security through chat whitelisting**, **minimal operational overhead**, and **real-time message processing** with built-in error handling and logging for production reliability.
 
 ### Platform and Infrastructure Choice
 
-**Platform:** Render.com (Worker Service)  
-**Key Services:** Background Worker, Environment Variables, GitHub Integration, Build/Deploy Pipeline  
-**Deployment Host and Regions:** US-East (Primary), with automatic failover capabilities  
+**Platform:** Docker on VPS (Self-hosted)  
+**Key Services:** Docker Container, Portainer Management, Volume Storage, Environment Variables  
+**Deployment Host and Regions:** Personal VPS (Self-managed), with manual scaling capabilities  
+**Container Management:** Portainer for web-based Docker container management  
 **n8n Integration:** Cloud-hosted n8n instance with webhook endpoints
 
 ### Repository Structure
@@ -48,21 +49,26 @@ graph TB
     N8N -->|Triggers| WF_N8N[n8n Workflows]
     WF_N8N -->|Actions| EXT[External Services]
     
-    RC[Render.com] -->|Hosts| TC
-    RC -->|Stores| ENV[Environment Variables]
-    RC -->|Monitors| LOG[Application Logs]
+    DOCKER[Docker Container] -->|Hosts| TC
+    DOCKER -->|Volume Mount| TS
+    VPS[Personal VPS] -->|Hosts| DOCKER
+    PORTAINER[Portainer UI] -->|Manages| DOCKER
+    PORTAINER -->|Config| ENV[Environment Variables]
+    DOCKER -->|Logs| LOG[Container Logs]
     
-    GH[GitHub Repo] -->|Deploy Trigger| RC
+    GH[GitHub Repo] -->|Manual Deploy| PORTAINER
     LOCAL[Local Dev] -->|Initial Auth| TS
     
     classDef telegram fill:#0088cc
     classDef python fill:#3776ab  
-    classDef cloud fill:#ff6b6b
+    classDef docker fill:#2496ed
+    classDef vps fill:#ff6b6b
     classDef automation fill:#4ecdc4
     
     class TG,TS telegram
     class TC,MH,WF,WD python
-    class RC,ENV,LOG,GH cloud
+    class DOCKER,PORTAINER docker
+    class VPS,ENV,LOG,GH vps
     class N8N,WF_N8N,EXT automation
 ```
 
@@ -70,9 +76,10 @@ graph TB
 
 - **Event-Driven Architecture:** Real-time message processing with webhook delivery - _Rationale:_ Enables immediate workflow triggering and loose coupling between Telegram and n8n
 - **Whitelist Security Pattern:** Application-level access control through chat ID filtering - _Rationale:_ Provides granular security without requiring Telegram bot permissions
-- **Persistent Session Pattern:** Local authentication with cloud session file deployment - _Rationale:_ Bypasses interactive authentication limitations on serverless platforms
+- **Persistent Session Pattern:** Local authentication with Docker volume session file persistence - _Rationale:_ Bypasses interactive authentication limitations while maintaining state across container restarts
+- **Containerization Pattern:** Docker-based deployment with volume mounts for data persistence - _Rationale:_ Provides consistent runtime environment and easy deployment management
 - **Webhook Delivery Pattern:** HTTP POST integration with timeout and error handling - _Rationale:_ Reliable integration with n8n's webhook trigger system
-- **Configuration as Code:** Environment-based configuration management - _Rationale:_ Secure credential handling and environment-specific deployments
+- **Configuration as Code:** Environment-based configuration management via Docker - _Rationale:_ Secure credential handling and container-specific deployments
 - **Fail-Safe Default Pattern:** Empty whitelist blocks all messages by default - _Rationale:_ Security-first approach preventing accidental data exposure
 
 ## Tech Stack
@@ -84,12 +91,14 @@ graph TB
 | **Backend Language** | Python | 3.9+ | Core application logic | Simple syntax, excellent Telegram library support |
 | **Telegram Client** | Telethon | 1.29.1 | Telegram MTProto API access | Official library, handles authentication and sessions |
 | **HTTP Client** | Requests | 2.31.0 | Webhook delivery to n8n | Standard, reliable, simple to use |
-| **Deployment Platform** | Render.com | N/A | Cloud hosting | Zero-config deployment, free tier available |
-| **Session Storage** | File System | N/A | Telegram session persistence | Built into Telethon, no external database needed |
-| **Configuration** | Environment Variables | N/A | Secure credential storage | Native platform support, no config framework needed |
-| **Logging** | Python logging | Built-in | Application monitoring | Simple built-in solution, no external service required |
-| **Version Control** | Git/GitHub | N/A | Code repository | Simple integration with Render.com |
-| **Process Management** | Render Worker | N/A | Long-running process | Platform handles process management automatically |
+| **Containerization** | Docker | Latest | Application containerization | Consistent runtime environment, easy deployment |
+| **Container Management** | Portainer | Latest | Web-based Docker management | User-friendly interface for container deployment |
+| **Deployment Platform** | Personal VPS | N/A | Self-hosted infrastructure | Full control, no vendor lock-in, cost-effective |
+| **Session Storage** | Docker Volume | N/A | Telegram session persistence | Persistent storage across container restarts |
+| **Configuration** | Docker Environment Variables | N/A | Secure credential storage | Container-native configuration management |
+| **Logging** | Python logging + Docker logs | Built-in | Application monitoring | Built-in logging with container log aggregation |
+| **Version Control** | Git/GitHub | N/A | Code repository | Simple integration with Docker deployment |
+| **Process Management** | Docker + Portainer | N/A | Long-running container | Container orchestration and automatic restart |
 | **Error Handling** | Try/Catch blocks | Built-in | Basic error management | Simple Python exception handling |
 
 ## Data Models
@@ -434,12 +443,15 @@ sequenceDiagram
 ```plaintext
 telegram-n8n-integration/
 ├── main.py                     # Complete application (single file)
-├── requirements.txt            # Python dependencies (2 packages)
-├── render.yaml                # Render.com deployment config
-├── session.session            # Telegram authentication (generated locally)
-├── .env.example               # Template for local environment variables
-├── .gitignore                 # Ignore .env (but include session.session)
-├── README.md                  # Basic setup instructions
+├── discover_chats.py          # Chat discovery utility
+├── requirements.txt           # Python dependencies (2 packages)
+├── Dockerfile                 # Docker container build configuration
+├── docker-compose.yml         # Docker deployment orchestration
+├── .env.example              # Template for local environment variables
+├── .gitignore                # Ignore .env (but include session.session)
+├── README.md                 # Comprehensive setup, testing, and deployment guide
+└── data/                     # Volume mount point for persistent data
+    └── session.session       # Telegram authentication (generated locally, persistent)
 └── docs/
     ├── telegram-n8n-integration.md    # Existing implementation guide
     └── architecture.md                # This architecture document
@@ -522,42 +534,66 @@ TELEGRAM_WHITELIST_CHATS=-1001234567890,123456789,-1001987654321
 
 ### Deployment Strategy
 
-**Backend Deployment:**
-- **Platform:** Render.com Background Worker Service
-- **Build Command:** `pip install -r requirements.txt`
-- **Start Command:** `python main.py`
-- **Deployment Method:** Automatic deployment on git push
-- **Runtime:** Python 3.9+ (managed by Render.com)
+**Docker Deployment:**
+- **Platform:** Personal VPS with Docker and Portainer
+- **Container Image:** Custom Python-based Docker image
+- **Build Method:** Dockerfile with Python 3.9+ base image
+- **Deployment Method:** Manual deployment via Portainer UI or docker-compose
+- **Runtime:** Containerized Python 3.9+ environment
+- **Data Persistence:** Docker volumes for session file storage
 
-### CI/CD Pipeline
+### Container Configuration
+
+```dockerfile
+# Dockerfile - Container build configuration
+FROM python:3.9-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY main.py discover_chats.py ./
+COPY .env.example ./
+
+# Create volume mount point for session persistence
+VOLUME ["/app/data"]
+
+CMD ["python", "main.py"]
+```
 
 ```yaml
-# render.yaml - Complete deployment configuration
+# docker-compose.yml - Complete deployment configuration
+version: '3.8'
 services:
-  - type: worker
-    name: telegram-n8n-listener
-    runtime: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python main.py"
-    envVars:
-      - key: TELEGRAM_API_ID
-        sync: false
-      - key: TELEGRAM_API_HASH
-        sync: false  
-      - key: TELEGRAM_PHONE
-        sync: false
-      - key: N8N_WEBHOOK_URL
-        sync: false
-      - key: TELEGRAM_WHITELIST_CHATS
-        sync: false
+  telegram-n8n-listener:
+    build: .
+    container_name: telegram-n8n-listener
+    restart: unless-stopped
+    volumes:
+      - telegram_session_data:/app/data
+    environment:
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+      - TELEGRAM_PHONE=${TELEGRAM_PHONE}
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - TELEGRAM_WHITELIST_CHATS=${TELEGRAM_WHITELIST_CHATS}
+    networks:
+      - telegram-network
+
+volumes:
+  telegram_session_data:
+
+networks:
+  telegram-network:
+    driver: bridge
 ```
 
 ### Environments
 
-| Environment | Service URL | Purpose | Configuration |
-|-------------|------------|---------|---------------|
-| **Development** | Local machine | Local testing with .env file | Manual python main.py |
-| **Production** | Render.com worker | Live message processing | Environment variables in Render dashboard |
+| Environment | Service Location | Purpose | Configuration |
+|-------------|-----------------|---------|---------------|
+| **Development** | Local machine | Local testing with .env file | Manual `python main.py` or `docker-compose up` |
+| **Production** | VPS Docker container | Live message processing | Environment variables in Portainer or docker-compose |
 
 ---
 

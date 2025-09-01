@@ -6,6 +6,8 @@ Listens to Telegram messages from whitelisted chats and forwards them to n8n web
 This application uses Telethon to connect to Telegram with user credentials,
 processes incoming messages from configured chat IDs, and delivers them to
 n8n workflows via HTTP POST webhooks.
+
+Updated for Docker deployment with volume-mounted session storage.
 """
 
 import os
@@ -62,8 +64,14 @@ if whitelist_chats:
 else:
     logger.warning("No whitelist configured - ALL messages will be forwarded! Consider setting TELEGRAM_WHITELIST_CHATS for security.")
 
-# Initialize Telegram client with session persistence
-client = TelegramClient('session', api_id, api_hash)
+# Docker-compatible session path - create data directory if it doesn't exist
+session_dir = "/app/data"
+if not os.path.exists(session_dir):
+    os.makedirs(session_dir, exist_ok=True)
+    logger.info(f"Created session directory: {session_dir}")
+
+# Initialize Telegram client with Docker volume session path
+client = TelegramClient('/app/data/session', api_id, api_hash)
 
 @client.on(events.NewMessage(incoming=True))
 async def message_handler(event):
@@ -152,6 +160,7 @@ async def main():
     """
     try:
         logger.info("Starting Telegram to n8n Integration...")
+        logger.info(f"Docker deployment - Session storage: /app/data/session.session")
         logger.info(f"Connecting to Telegram API with phone: {phone}")
         
         # Start the client - this will use existing session or prompt for authentication
@@ -161,7 +170,7 @@ async def main():
         logger.info(f"Webhook endpoint: {n8n_webhook}")
         
         if allowed_chat_ids:
-            logger.info(f"Monitoring {len(allowed_chat_ids)} whitelisted chats")
+            logger.info(f"Monitoring {len(allowed_chat_ids)} whitelisted chats: {allowed_chat_ids}")
         else:
             logger.warning("No whitelist configured - monitoring ALL chats!")
         

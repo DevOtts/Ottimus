@@ -2,6 +2,7 @@
 """
 Chat ID Discovery Script
 Lists all your Telegram chats with their IDs for whitelist configuration.
+Updated for Docker deployment with /app/data session storage.
 """
 
 import os
@@ -21,7 +22,14 @@ if not all([api_id, api_hash, phone]):
     print("❌ Missing environment variables. Make sure .env is configured.")
     exit(1)
 
-client = TelegramClient('session', api_id, api_hash)
+# Docker-compatible session path - create data directory if it doesn't exist
+session_dir = "/app/data"
+if not os.path.exists(session_dir):
+    os.makedirs(session_dir, exist_ok=True)
+    print(f"Created session directory: {session_dir}")
+
+# Initialize client with Docker volume session path
+client = TelegramClient('/app/data/session', api_id, api_hash)
 
 async def discover_chats():
     """List all chats with their IDs and types"""
