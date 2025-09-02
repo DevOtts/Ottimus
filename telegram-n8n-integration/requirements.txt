@@ -2,7 +2,10 @@
 # Exact versions as specified in architecture document
 
 # Telethon - Telegram MTProto API client
-telethon==1.29.1
+telethon==1.40.0
 
 # Requests - HTTP library for webhook delivery
 requests==2.31.0
+
+# Python-dotenv - Load environment variables from .env file
+python-dotenv==1.0.0
