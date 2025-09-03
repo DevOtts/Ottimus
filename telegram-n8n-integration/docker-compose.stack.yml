@@ -1,0 +1,47 @@
+# docker-compose.stack.yml - Portainer Stack Deployment (No Build)
+# This version downloads code at runtime instead of building
+
+version: '3.8'
+
+services:
+  telegram-n8n-listener:
+    image: python:3.9-slim
+    command: >
+      sh -c "
+      pip install telethon==1.40.0 requests==2.31.0 python-dotenv==1.0.0 &&
+      wget -O /app/main.py https://raw.githubusercontent.com/DevOtts/Ottimus/main/telegram-n8n-integration/main.py &&
+      wget -O /app/discover_chats.py https://raw.githubusercontent.com/DevOtts/Ottimus/main/telegram-n8n-integration/discover_chats.py &&
+      mkdir -p /app/data &&
+      python /app/main.py
+      "
+    
+    volumes:
+      - telegram_session_data:/app/data
+    
+    environment:
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+      - TELEGRAM_PHONE=${TELEGRAM_PHONE}
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - TELEGRAM_WHITELIST_CHATS=${TELEGRAM_WHITELIST_CHATS}
+    
+    networks:
+      - telegram-network
+    
+    deploy:
+      restart_policy:
+        condition: unless-stopped
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  telegram_session_data:
+    driver: local
+
+networks:
+  telegram-network:
+    driver: bridge
