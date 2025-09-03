@@ -1,13 +1,13 @@
-# docker-compose.yml - Complete deployment configuration
+# docker-compose.yml - Portainer Stack Compatible Configuration
 # Telegram to n8n Integration - Docker Compose Orchestration
 
 version: '3.8'
 
 services:
   telegram-n8n-listener:
-    build: .
-    container_name: telegram-n8n-listener
-    restart: unless-stopped
+    build: 
+      context: .
+      dockerfile: Dockerfile
     
     # Volume mapping for session persistence
     volumes:
@@ -24,6 +24,11 @@ services:
     # Networking configuration
     networks:
       - telegram-network
+    
+    # Restart policy for stacks
+    deploy:
+      restart_policy:
+        condition: unless-stopped
     
     # Logging configuration
     logging:
