@@ -45,6 +45,7 @@ volumes:
 # Custom network for container isolation
 networks:
   telegram-network:
-    driver: bridge
+    driver: overlay
+    attachable: true
 
 
