@@ -36,22 +36,55 @@ source telegram-env/bin/activate
 # 4. Install dependencies
 pip install telethon requests python-dotenv
 
-# 5. Create the application
+# 5. Create and edit environment file
+nano .env
+# Add your credentials:
+# TELEGRAM_API_ID=your_api_id
+# TELEGRAM_API_HASH=your_api_hash  
+# TELEGRAM_PHONE=your_phone_number
+# N8N_WEBHOOK_URL=your_n8n_webhook_url
+# TELEGRAM_WHITELIST_CHATS=
+
+# 6. Create the application
 cat > telegram_n8n_integration.py << 'EOF'
 #!/usr/bin/env python3
 import os, logging, asyncio
 from telethon import TelegramClient, events
 import requests
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Configuration
-client = TelegramClient('session', 16952372, '6993367159138785c01a9a4d24ad3ee9')
+# Configuration from environment variables
+api_id = os.getenv("TELEGRAM_API_ID")
+api_hash = os.getenv("TELEGRAM_API_HASH")
+phone = os.getenv("TELEGRAM_PHONE")
+n8n_webhook = os.getenv("N8N_WEBHOOK_URL")
+whitelist_chats = os.getenv("TELEGRAM_WHITELIST_CHATS", "")
+
+# Validate required variables
+if not all([api_id, api_hash, phone, n8n_webhook]):
+    logger.error("Missing required environment variables!")
+    exit(1)
+
+# Parse whitelist
+allowed_chat_ids = []
+if whitelist_chats:
+    allowed_chat_ids = [int(chat_id.strip()) for chat_id in whitelist_chats.split(",") if chat_id.strip()]
+
+client = TelegramClient('session', api_id, api_hash)
 
 @client.on(events.NewMessage(incoming=True))
 async def message_handler(event):
     try:
+        # Check whitelist if configured
+        if allowed_chat_ids and event.chat_id not in allowed_chat_ids:
+            return
+            
         message_data = {
             "message": event.raw_text or "",
             "chat_id": event.chat_id,
@@ -65,23 +98,27 @@ async def message_handler(event):
         preview = (message_data["message"][:50] + "...") if len(message_data["message"]) > 50 else message_data["message"]
         logger.info(f"New message from {chat_type} {event.chat_id}: {preview}")
         
-        response = requests.post('https://webhookn8n.otimiza.ai/webhook/ottimus-telegram-webhook', 
-                               json=message_data, timeout=30)
+        response = requests.post(n8n_webhook, json=message_data, timeout=30)
         logger.info(f"Sent to n8n: HTTP {response.status_code}")
     except Exception as e:
         logger.error(f"Error: {e}")
 
 async def main():
     logger.info("Starting Telegram to n8n Integration...")
-    await client.start(phone='+5541999193736')
-    logger.info("Connected! Listening for ALL messages...")
+    if allowed_chat_ids:
+        logger.info(f"Monitoring {len(allowed_chat_ids)} whitelisted chats")
+    else:
+        logger.info("Monitoring ALL chats (no whitelist)")
+    
+    await client.start(phone=lambda: phone)
+    logger.info("Connected! Listening for messages...")
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
     asyncio.run(main())
 EOF
 
-# 6. Run and authenticate
+# 7. Run and authenticate
 python telegram_n8n_integration.py
 # Enter SMS code and 2FA when prompted
 ```
@@ -100,6 +137,7 @@ Type=simple
 User=root
 WorkingDirectory=/root/telegram-n8n
 Environment=PATH=/root/telegram-n8n/telegram-env/bin
+EnvironmentFile=/root/telegram-n8n/.env
 ExecStart=/root/telegram-n8n/telegram-env/bin/python /root/telegram-n8n/telegram_n8n_integration.py
 Restart=always
 RestartSec=10
