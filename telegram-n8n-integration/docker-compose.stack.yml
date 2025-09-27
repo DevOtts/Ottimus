@@ -21,10 +21,10 @@ services:
       - TELEGRAM_PHONE=${TELEGRAM_PHONE}
       - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
       - TELEGRAM_WHITELIST_CHATS=${TELEGRAM_WHITELIST_CHATS}
-    network_mode: host  # Host networking to fix Telegram connectivity
     deploy:
       restart_policy:
-        condition: unless-stopped
+        condition: on-failure
+        max_attempts: 3
 
 volumes:
   telegram_session_data:
