@@ -155,6 +155,21 @@ sudo systemctl start telegram-n8n.service
 sudo systemctl status telegram-n8n.service
 ```
 
+### Restart the service
+
+When you do some change to the code or .env, you will need to restart the service.
+
+```bash
+# Restart the service to reload .env changes
+sudo systemctl restart telegram-n8n.service
+
+# Check that it restarted successfully
+sudo systemctl status telegram-n8n.service
+
+# Watch the live logs to see it working
+sudo journalctl -u telegram-n8n.service -f
+```
+
 ---
 
 ## 🐳 Method 2: Docker Compose (Non-Swarm Only)
