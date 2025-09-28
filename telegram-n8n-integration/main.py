@@ -64,14 +64,22 @@ if whitelist_chats:
 else:
     logger.warning("No whitelist configured - ALL messages will be forwarded! Consider setting TELEGRAM_WHITELIST_CHATS for security.")
 
-# Docker-compatible session path - create data directory if it doesn't exist
-session_dir = "/app/data"
-if not os.path.exists(session_dir):
-    os.makedirs(session_dir, exist_ok=True)
-    logger.info(f"Created session directory: {session_dir}")
+# Environment-aware session path
+if os.path.exists('/app'):
+    # Docker environment - use volume-mounted path
+    session_dir = "/app/data"
+    if not os.path.exists(session_dir):
+        os.makedirs(session_dir, exist_ok=True)
+        logger.info(f"Created Docker session directory: {session_dir}")
+    session_path = '/app/data/session'
+    logger.info("Running in Docker environment")
+else:
+    # VPS/Local environment - use local session file
+    session_path = 'session'
+    logger.info("Running in VPS/Local environment")
 
-# Initialize Telegram client with Docker volume session path
-client = TelegramClient('/app/data/session', api_id, api_hash)
+# Initialize Telegram client with environment-appropriate session path
+client = TelegramClient(session_path, api_id, api_hash)
 
 @client.on(events.NewMessage(incoming=True))
 async def message_handler(event):
@@ -97,13 +105,16 @@ async def message_handler(event):
             "sender_id": event.sender_id,
             "date": event.date.isoformat(),
             "is_group": event.is_group,
-            "is_channel": event.is_channel
+            "is_channel": event.is_channel,
+            "message_id": event.id,  # Current message ID
+            "reply_to_msg_id": event.reply_to_msg_id if event.reply_to_msg_id else None  # ID of replied message
         }
         
         # Log successful whitelist match
         chat_type = "group" if event.is_group else "channel" if event.is_channel else "DM"
         message_preview = (message_data["message"][:50] + "...") if len(message_data["message"]) > 50 else message_data["message"]
-        logger.info(f"New message from {chat_type} {event.chat_id}: {message_preview}")
+        reply_info = f" (replying to msg {event.reply_to_msg_id})" if event.reply_to_msg_id else ""
+        logger.info(f"New message from {chat_type} {event.chat_id}: {message_preview}{reply_info}")
         
         # Send to n8n webhook with error handling
         await send_to_webhook(message_data)
@@ -160,7 +171,7 @@ async def main():
     """
     try:
         logger.info("Starting Telegram to n8n Integration...")
-        logger.info(f"Docker deployment - Session storage: /app/data/session.session")
+        logger.info(f"Session storage: {session_path}.session")
         logger.info(f"Connecting to Telegram API with phone: {phone}")
         
         # Start the client - this will use existing session or prompt for authentication
