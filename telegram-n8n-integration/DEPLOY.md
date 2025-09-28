@@ -45,80 +45,27 @@ nano .env
 # N8N_WEBHOOK_URL=your_n8n_webhook_url
 # TELEGRAM_WHITELIST_CHATS=
 
-# 6. Create the application
-cat > telegram_n8n_integration.py << 'EOF'
-#!/usr/bin/env python3
-import os, logging, asyncio
-from telethon import TelegramClient, events
-import requests
-from dotenv import load_dotenv
+# 6. Create the application file
+touch telegram_n8n_integration.py
 
-# Load environment variables
-load_dotenv()
+# 7. Copy the enhanced main.py content from this repository
+# Method A: If you have git access, clone and copy:
+git clone https://github.com/DevOtts/Ottimus.git temp-repo
+cp temp-repo/telegram-n8n-integration/main.py telegram_n8n_integration.py
+rm -rf temp-repo
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Method B: Or manually copy the content from main.py
+# Visit: https://github.com/DevOtts/Ottimus/blob/main/telegram-n8n-integration/main.py
+# Copy the entire content and paste it into telegram_n8n_integration.py
 
-# Configuration from environment variables
-api_id = os.getenv("TELEGRAM_API_ID")
-api_hash = os.getenv("TELEGRAM_API_HASH")
-phone = os.getenv("TELEGRAM_PHONE")
-n8n_webhook = os.getenv("N8N_WEBHOOK_URL")
-whitelist_chats = os.getenv("TELEGRAM_WHITELIST_CHATS", "")
+# The main.py file includes these enhancements:
+# ✅ Reply message support (reply_to_msg_id field)
+# ✅ Message ID tracking (message_id field) 
+# ✅ Enhanced error handling and logging
+# ✅ Comprehensive documentation
+# ✅ Docker-compatible session management
 
-# Validate required variables
-if not all([api_id, api_hash, phone, n8n_webhook]):
-    logger.error("Missing required environment variables!")
-    exit(1)
-
-# Parse whitelist
-allowed_chat_ids = []
-if whitelist_chats:
-    allowed_chat_ids = [int(chat_id.strip()) for chat_id in whitelist_chats.split(",") if chat_id.strip()]
-
-client = TelegramClient('session', api_id, api_hash)
-
-@client.on(events.NewMessage(incoming=True))
-async def message_handler(event):
-    try:
-        # Check whitelist if configured
-        if allowed_chat_ids and event.chat_id not in allowed_chat_ids:
-            return
-            
-        message_data = {
-            "message": event.raw_text or "",
-            "chat_id": event.chat_id,
-            "sender_id": event.sender_id,
-            "date": event.date.isoformat(),
-            "is_group": event.is_group,
-            "is_channel": event.is_channel
-        }
-        
-        chat_type = "group" if event.is_group else "channel" if event.is_channel else "DM"
-        preview = (message_data["message"][:50] + "...") if len(message_data["message"]) > 50 else message_data["message"]
-        logger.info(f"New message from {chat_type} {event.chat_id}: {preview}")
-        
-        response = requests.post(n8n_webhook, json=message_data, timeout=30)
-        logger.info(f"Sent to n8n: HTTP {response.status_code}")
-    except Exception as e:
-        logger.error(f"Error: {e}")
-
-async def main():
-    logger.info("Starting Telegram to n8n Integration...")
-    if allowed_chat_ids:
-        logger.info(f"Monitoring {len(allowed_chat_ids)} whitelisted chats")
-    else:
-        logger.info("Monitoring ALL chats (no whitelist)")
-    
-    await client.start(phone=lambda: phone)
-    logger.info("Connected! Listening for messages...")
-    await client.run_until_disconnected()
-
-if __name__ == "__main__":
-    asyncio.run(main())
-EOF
-
-# 7. Run and authenticate
+# 8. Run and authenticate
 python telegram_n8n_integration.py
 # Enter SMS code and 2FA when prompted
 ```
@@ -155,7 +102,42 @@ sudo systemctl start telegram-n8n.service
 sudo systemctl status telegram-n8n.service
 ```
 
-### Restart the service
+### Re-Authentication Required (Common Issue)
+
+**When Telegram asks for authentication again while service is running:**
+
+This happens when:
+- Telegram session expires (security measure)
+- You see "SendCodeRequest" errors in logs  
+- Service keeps failing with authentication errors
+
+**Solution:**
+```bash
+# 1. Stop the service first
+sudo systemctl stop telegram-n8n.service
+
+# 2. Navigate to project directory and activate environment
+cd /root/telegram-n8n
+source telegram-env/bin/activate
+
+# 3. Clean old session files (important!)
+rm -f session.session*
+
+# 4. Run manual authentication
+python telegram_n8n_integration.py
+# ↑ Enter SMS code when prompted
+# ↑ Enter 2FA password if you have it enabled
+# ↑ Press Ctrl+C after you see "Successfully connected to Telegram!"
+
+# 5. Restart the service
+sudo systemctl start telegram-n8n.service
+
+# 6. Verify it's working
+sudo systemctl status telegram-n8n.service
+sudo journalctl -u telegram-n8n.service -f
+```
+
+### Regular Service Management
 
 When you do some change to the code or .env, you will need to restart the service.
 
@@ -271,8 +253,36 @@ INFO - Sent to n8n: HTTP 200
 ## 🛠️ Troubleshooting
 
 ### Authentication Issues
-- **Problem**: No SMS code prompt
-- **Solution**: Delete session file and restart
+- **Problem**: No SMS code prompt or "EOF when reading a line" error
+- **Solution**: 
+  ```bash
+  # Stop the service first
+  sudo systemctl stop telegram-n8n.service
+  
+  # Run manually to complete authentication
+  cd /root/telegram-n8n
+  source telegram-env/bin/activate
+  python telegram_n8n_integration.py
+  # Enter SMS code when prompted, then Ctrl+C after "Connected!"
+  
+  # Restart service
+  sudo systemctl start telegram-n8n.service
+  ```
+
+### Rate Limit Error (165 seconds wait)
+- **Problem**: "A wait of 165 seconds is required (caused by SendCodeRequest)"
+- **Cause**: Session file path mismatch between Docker and VPS versions
+- **Solution**: 
+  ```bash
+  # Delete old session files and re-authenticate
+  sudo systemctl stop telegram-n8n.service
+  cd /root/telegram-n8n
+  rm -f session.session*
+  source telegram-env/bin/activate
+  python telegram_n8n_integration.py
+  # Complete authentication, then restart service
+  sudo systemctl start telegram-n8n.service
+  ```
 
 ### Connection Timeouts
 - **Problem**: Can't connect to Telegram
